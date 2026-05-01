@@ -9,55 +9,80 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Setup Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 🔥 BUILD BACKEND
+      # 3. Build backend image
       - name: Build Backend Image
         run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest ./backend
 
-      # 🔥 BUILD FRONTEND
+      # 4. Build frontend image
       - name: Build Frontend Image
         run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest ./frontend
 
-      # 🔐 LOGIN
+      # 5. Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 🚀 PUSH BACKEND
+      # 6. Push backend image
       - name: Push Backend Image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest
 
-      # 🚀 PUSH FRONTEND
+      # 7. Push frontend image
       - name: Push Frontend Image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest
 
-      # 🧪 TEST (через docker run вместо compose)
-      - name: Run backend container
+      # 8. Run backend container
+      - name: Start Backend Container
         run: |
-          docker run -d -p 5000:5000 --name backend ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest
+          docker run -d -p 5000:5000 --name backend \
+          ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest
 
-      - name: Run frontend container
+      # 9. Run frontend container
+      - name: Start Frontend Container
         run: |
-          docker run -d -p 8080:80 --name frontend ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest
+          docker run -d -p 8080:80 --name frontend \
+          ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest
 
-      - name: Wait for startup
-        run: sleep 15
+      # 10. Wait for services (retry instead of sleep)
+      - name: Wait for Backend
+        run: |
+          for i in {1..30}; do
+            echo "Attempt $i"
+            curl -f http://localhost:5000/tasks && exit 0
+            sleep 2
+          done
+          echo "Backend failed to start"
+          docker logs backend
+          exit 1
 
-      - name: Test Backend
-        run: curl --fail http://localhost:5000/tasks
-
+      # 11. Test Frontend
       - name: Test Frontend
         run: curl --fail http://localhost:8080
 
+      # 12. Test POST endpoint
+      - name: Test Create Task
+        run: |
+          curl --fail -X POST http://localhost:5000/tasks \
+          -H "Content-Type: application/json" \
+          -d '{"title":"GitHub Actions Test"}'
+
+      # 13. Debug logs (if fail)
+      - name: Show Backend Logs
+        if: always()
+        run: docker logs backend
+
+      # 14. Cleanup
       - name: Cleanup
         if: always()
         run: |
           docker stop backend frontend || true
-          docker rm backend frontend || true
+          docker rm backend frontend || trueue
