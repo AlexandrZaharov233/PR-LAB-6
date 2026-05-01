@@ -1,0 +1,240 @@
+кеты).
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ToDo App</title>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+
+<h1>ToDo List</h1>
+
+<input id="taskInput" placeholder="New task">
+<button onclick="addTask()">Add</button>
+
+<hr>
+
+<h3>Search task by ID</h3>
+<input id="searchId" placeholder="Enter task ID">
+<button onclick="searchTaskById()">Search</button>
+
+<div id="searchResult"></div>
+
+<hr>
+
+<h3>Selected Task</h3>
+<div id="selectedTask"><p>No task selected</p></div>
+
+<ul id="taskList"></ul>
+
+<hr>
+
+<h2>Email Sender</h2>
+
+<input id="emailTo" placeholder="To email"><br><br>
+<input id="emailSubject" placeholder="Subject"><br><br>
+<textarea id="emailMessage" placeholder="Message"></textarea><br><br>
+
+<select id="protocol">
+    <option value="smtp">SMTP (send real email)</option>
+    <option value="imap">IMAP (demo)</option>
+    <option value="pop3">POP3 (demo)</option>
+</select>
+
+<br><br>
+<button onclick="sendEmail()">Send Email</button>
+
+<div id="emailStatus"></div>
+
+<script>
+const apiUrl = "http://localhost:5000/tasks";
+
+let selectedTaskId = null;
+
+//
+// ---------------- WEBSOCKET ----------------
+//
+const socket = io("http://localhost:5000");
+
+socket.on("connect", () => {
+    console.log("Connected to WebSocket");
+});
+
+socket.on("task_created", task => {
+    fetchTasks();
+});
+
+socket.on("task_updated", task => {
+    fetchTasks();
+});
+
+socket.on("task_deleted", data => {
+    fetchTasks();
+});
+
+//
+// ---------------- TASKS ----------------
+//
+async function fetchTasks() {
+    const res = await fetch(apiUrl);
+    const tasks = await res.json();
+
+    const list = document.getElementById("taskList");
+    list.innerHTML = "";
+
+    tasks.forEach(task => {
+        const li = document.createElement("li");
+
+        const span = document.createElement("span");
+        span.textContent = task.title;
+        span.style.cursor = "pointer";
+        span.onclick = () => getTaskById(task.id);
+
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "Edit";
+        editBtn.onclick = () => enableEdit(task.id, task.title);
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "Delete";
+        delBtn.onclick = () => deleteTask(task.id);
+
+        li.appendChild(span);
+        li.appendChild(editBtn);
+        li.appendChild(delBtn);
+
+        list.appendChild(li);
+    });
+}
+
+//
+// CREATE
+//
+async function addTask() {
+    const title = document.getElementById("taskInput").value;
+
+    if (!title) return;
+
+    await fetch(apiUrl, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ title })
+    });
+
+    document.getElementById("taskInput").value = "";
+}
+
+//
+// DELETE
+//
+async function deleteTask(id) {
+    await fetch(`${apiUrl}/${id}`, {
+        method: "DELETE"
+    });
+}
+
+//
+// EDIT MODE
+//
+function enableEdit(id, title) {
+    selectedTaskId = id;
+
+    document.getElementById("selectedTask").innerHTML = `
+        <p><b>ID:</b> ${id}</p>
+        <input id="editInput" value="${title}">
+        <button onclick="updateTask()">Save</button>
+    `;
+}
+
+//
+// UPDATE
+//
+async function updateTask() {
+    const title = document.getElementById("editInput").value;
+
+    await fetch(`${apiUrl}/${selectedTaskId}`, {
+        method: "PUT",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ title })
+    });
+
+    selectedTaskId = null;
+
+    document.getElementById("selectedTask").innerHTML =
+        "<p>No task selected</p>";
+}
+
+//
+// GET BY ID
+//
+async function getTaskById(id) {
+    const res = await fetch(`${apiUrl}/${id}`);
+    const task = await res.json();
+
+    selectedTaskId = task.id;
+
+    document.getElementById("selectedTask").innerHTML = `
+        <p><b>ID:</b> ${task.id}</p>
+        <input id="editInput" value="${task.title}">
+        <button onclick="updateTask()">Save</button>
+    `;
+}
+
+//
+// SEARCH BY ID
+//
+async function searchTaskById() {
+    const id = document.getElementById("searchId").value;
+
+    const res = await fetch(`${apiUrl}/${id}`);
+    const box = document.getElementById("searchResult");
+
+    if (!res.ok) {
+        box.innerHTML = "<p>Task not found</p>";
+        return;
+    }
+
+    const task = await res.json();
+
+    box.innerHTML = `
+        <p><b>${task.id}</b> - ${task.title}</p>
+        <button onclick="getTaskById(${task.id})">Open</button>
+    `;
+}
+
+//
+// ---------------- EMAIL ----------------
+//
+async function sendEmail() {
+    const to = document.getElementById("emailTo").value;
+    const subject = document.getElementById("emailSubject").value;
+    const message = document.getElementById("emailMessage").value;
+    const protocol = document.getElementById("protocol").value;
+
+    const res = await fetch("http://localhost:5000/send-email", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            to,
+            subject,
+            message,
+            protocol
+        })
+    });
+
+    const data = await res.json();
+
+    document.getElementById("emailStatus").innerHTML =
+        `<p><b>Status:</b> ${data.status || data.error}</p>`;
+}
+
+//
+// INIT
+//
+fetchTasks();
+</script>
+
+</body>
+</html>
