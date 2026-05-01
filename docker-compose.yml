@@ -12,6 +12,11 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build: ./backend
@@ -24,7 +29,7 @@ services:
 
   frontend:
     build: ./frontend
-    image: Yzakharov123/todo-frontend:latest
+    image: zakharov123/todo-frontend:latest
     container_name: todo-frontend
     depends_on:
       - backend
