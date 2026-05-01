@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  pg-todo:
+    image: postgres:15
+    container_name: pg-todo
+    environment:
+      POSTGRES_DB: todo_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    image: zakharov123/todo-backend:latest
+    container_name: todo-backend
+    depends_on:
+      - pg-todo
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build: ./frontend
+    image: Yzakharov123/todo-frontend:latest
+    container_name: todo-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
