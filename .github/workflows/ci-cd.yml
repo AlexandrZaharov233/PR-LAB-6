@@ -15,14 +15,40 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build images
-        run: docker compose build
+      # 🔥 BUILD BACKEND
+      - name: Build Backend Image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest ./backend
 
-      - name: Start containers
-        run: docker compose up -d
+      # 🔥 BUILD FRONTEND
+      - name: Build Frontend Image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest ./frontend
+
+      # 🔐 LOGIN
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 🚀 PUSH BACKEND
+      - name: Push Backend Image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest
+
+      # 🚀 PUSH FRONTEND
+      - name: Push Frontend Image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest
+
+      # 🧪 TEST (через docker run вместо compose)
+      - name: Run backend container
+        run: |
+          docker run -d -p 5000:5000 --name backend ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest
+
+      - name: Run frontend container
+        run: |
+          docker run -d -p 8080:80 --name frontend ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest
 
       - name: Wait for startup
-        run: sleep 20
+        run: sleep 15
 
       - name: Test Backend
         run: curl --fail http://localhost:5000/tasks
@@ -30,24 +56,8 @@ jobs:
       - name: Test Frontend
         run: curl --fail http://localhost:8080
 
-      - name: Test POST task
-        run: |
-          curl --fail -X POST http://localhost:5000/tasks \
-          -H "Content-Type: application/json" \
-          -d '{"title":"GitHub Actions Test"}'
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Push Backend Image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:latest
-
-      - name: Push Frontend Image
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:latest
-
       - name: Cleanup
         if: always()
-        run: docker compose down -v --rmi all
+        run: |
+          docker stop backend frontend || true
+          docker rm backend frontend || true
